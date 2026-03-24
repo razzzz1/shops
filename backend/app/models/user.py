@@ -1,5 +1,3 @@
-# app/models/user.py
-# ───────────────────
 # User model — every person who can log into the system.
 #
 # Roles
