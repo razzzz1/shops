@@ -288,7 +288,7 @@ class TestVerifyInvite:
 
         response = client.get(f"/api/auth/verify-invite?token={raw_token}")
         assert response.status_code == 400
-        assert data := response.get_json()
+        assert (data := response.get_json())
         assert data["valid"] is False
 
 
