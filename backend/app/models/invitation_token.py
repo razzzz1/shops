@@ -81,11 +81,25 @@ class InvitationToken(db.Model):
         Return True only if this token can still be used for registration.
 
         A token is valid when:
-          • It has NOT already been consumed (is_used = False)
-          • The current time is BEFORE the expiry timestamp
+          - It has NOT already been consumed (is_used = False)
+          - The current time is BEFORE the expiry timestamp
+
+        Why the tzinfo guard?
+        ---------------------
+        PostgreSQL preserves timezone-aware datetimes and returns them with
+        tzinfo intact.  SQLite (used in tests) strips tzinfo on read-back,
+        returning a naive datetime.  Comparing an aware now to a naive
+        expires_at raises TypeError in Python 3.10+.
+        We normalise by treating any naive datetime as UTC before comparing.
         """
-        now = datetime.now(timezone.utc)
-        return (not self.is_used) and (now < self.expires_at)
+        now     = datetime.now(timezone.utc)
+        expires = self.expires_at
+
+        # SQLite strips tzinfo on read-back -- re-attach UTC so comparison works
+        if expires is not None and expires.tzinfo is None:
+            expires = expires.replace(tzinfo=timezone.utc)
+
+        return (not self.is_used) and (expires is not None) and (now < expires)
 
     def to_dict(self):
         return {

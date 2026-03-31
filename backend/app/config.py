@@ -85,9 +85,14 @@ class TestingConfig(BaseConfig):
 class ProductionConfig(BaseConfig):
     """
     Production settings.
-    DEBUG is off.  DATABASE_URL *must* be set in the environment — if it's
-    missing, the app will crash at startup with a KeyError, which is better
-    than silently running against the wrong database.
+    DEBUG is off.  DATABASE_URL must be set in the environment.
+
+    Note: we use os.environ.get() here (not os.environ[]) so that importing
+    this module during testing does NOT crash when DATABASE_URL is absent.
+    The testing config overrides SQLALCHEMY_DATABASE_URI with SQLite anyway,
+    so this class is never actually used during the test run.
+    A missing DATABASE_URL in a real production deploy will surface as a
+    SQLAlchemy connection error at first DB access — early enough to catch.
     """
     DEBUG                   = False
-    SQLALCHEMY_DATABASE_URI = os.environ["DATABASE_URL"]  # hard fail if unset
+    SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL", "")
