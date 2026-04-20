@@ -1,44 +1,38 @@
+
 // src/pages/admin/UsersPage.js
 // ──────────────────────────────
-// User management page for admins (manage clerks) and merchants (manage admins).
-//
-// Features:
-//   • Invite a new user by email (sends tokenised link)
-//   • View all visible users in a table
-//   • Activate / Deactivate accounts (soft disable — preserves history)
-//   • Permanently delete accounts
-//
-// The API call is made directly with the `api` util here rather than via
-// Redux because this page has self-contained local state (the user list)
-// and doesn't need to be shared globally.
+// User management — create users directly without email invitations.
 
 import React, { useEffect, useState } from "react";
 import { useSelector } from "react-redux";
-import { Users, UserPlus, UserX, UserCheck, Trash2, Mail } from "lucide-react";
+import {
+  Users, UserPlus, UserX, UserCheck, Trash2, Eye, EyeOff,
+} from "lucide-react";
 import toast from "react-hot-toast";
 
 import api from "../../utils/api";
+
+const EMPTY_FORM = {
+  email: "", first_name: "", last_name: "",
+  password: "", role: "clerk",
+};
 
 export default function UsersPage() {
   const { user: currentUser } = useSelector((s) => s.auth);
 
   const [users,      setUsers]      = useState([]);
   const [loading,    setLoading]    = useState(false);
-  const [showInvite, setShowInvite] = useState(false);
-  const [inviteForm, setInviteForm] = useState({ email: "", role: "clerk" });
-  const [inviting,   setInviting]   = useState(false);
+  const [showForm,   setShowForm]   = useState(false);
+  const [form,       setForm]       = useState(EMPTY_FORM);
+  const [saving,     setSaving]     = useState(false);
+  const [showPass,   setShowPass]   = useState(false);
 
-  // ── Load users on mount ───────────────────────────────────────────────────
-  useEffect(() => {
-    loadUsers();
-  }, []);
+  useEffect(() => { loadUsers(); }, []);
 
   async function loadUsers() {
     setLoading(true);
     try {
-      const { data } = await api.get("/users/", {
-        params: { include_inactive: 1 },
-      });
+      const { data } = await api.get("/users/", { params: { include_inactive: 1 } });
       setUsers(data);
     } catch (err) {
       toast.error(err.response?.data?.message || "Failed to load users.");
@@ -47,65 +41,74 @@ export default function UsersPage() {
     }
   }
 
-  // ── Send invitation ───────────────────────────────────────────────────────
-  async function handleInvite(e) {
+  function handleChange(e) {
+    const { name, value } = e.target;
+    setForm((prev) => ({ ...prev, [name]: value }));
+  }
+
+  // ── Create user directly ──────────────────────────────────────────────────
+  async function handleCreate(e) {
     e.preventDefault();
-    setInviting(true);
+
+    if (form.password.length < 8) {
+      toast.error("Password must be at least 8 characters.");
+      return;
+    }
+
+    setSaving(true);
     try {
-      await api.post("/auth/invite", {
-        email:    inviteForm.email.trim().toLowerCase(),
-        role:     inviteForm.role,
-        store_id: currentUser.store_id,
+      const { data } = await api.post("/auth/create-user", {
+        email:      form.email.trim().toLowerCase(),
+        first_name: form.first_name.trim(),
+        last_name:  form.last_name.trim(),
+        password:   form.password,
+        role:       form.role,
+        store_id:   currentUser.store_id,
       });
-      toast.success(`Invitation sent to ${inviteForm.email}.`);
-      setInviteForm({ email: "", role: "clerk" });
-      setShowInvite(false);
+
+      toast.success(`${data.user.first_name} ${data.user.last_name} created successfully!`);
+      setForm(EMPTY_FORM);
+      setShowForm(false);
+      setUsers((prev) => [...prev, data.user]);
+
     } catch (err) {
-      toast.error(err.response?.data?.message || "Failed to send invitation.");
+      toast.error(err.response?.data?.message || "Failed to create user.");
     } finally {
-      setInviting(false);
+      setSaving(false);
     }
   }
 
-  // ── Deactivate user ───────────────────────────────────────────────────────
   async function handleDeactivate(userId, email) {
     try {
       await api.patch(`/users/${userId}/deactivate`);
-      toast.success(`${email} has been deactivated.`);
-      setUsers((prev) =>
-        prev.map((u) => u.id === userId ? { ...u, is_active: false } : u)
-      );
+      toast.success(`${email} deactivated.`);
+      setUsers((prev) => prev.map((u) => u.id === userId ? { ...u, is_active: false } : u));
     } catch (err) {
-      toast.error(err.response?.data?.message || "Failed to deactivate.");
+      toast.error(err.response?.data?.message || "Failed.");
     }
   }
 
-  // ── Activate user ─────────────────────────────────────────────────────────
   async function handleActivate(userId, email) {
     try {
       await api.patch(`/users/${userId}/activate`);
-      toast.success(`${email} has been reactivated.`);
-      setUsers((prev) =>
-        prev.map((u) => u.id === userId ? { ...u, is_active: true } : u)
-      );
+      toast.success(`${email} reactivated.`);
+      setUsers((prev) => prev.map((u) => u.id === userId ? { ...u, is_active: true } : u));
     } catch (err) {
-      toast.error(err.response?.data?.message || "Failed to activate.");
+      toast.error(err.response?.data?.message || "Failed.");
     }
   }
 
-  // ── Delete user ───────────────────────────────────────────────────────────
   async function handleDelete(userId, email) {
-    if (!window.confirm(`Permanently delete ${email}? This cannot be undone.`)) return;
+    if (!window.confirm(`Permanently delete ${email}?`)) return;
     try {
       await api.delete(`/users/${userId}`);
-      toast.success(`${email} has been deleted.`);
+      toast.success(`${email} deleted.`);
       setUsers((prev) => prev.filter((u) => u.id !== userId));
     } catch (err) {
-      toast.error(err.response?.data?.message || "Failed to delete user.");
+      toast.error(err.response?.data?.message || "Failed.");
     }
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="page">
 
@@ -114,60 +117,63 @@ export default function UsersPage() {
           <h2 className="page__title">User Management</h2>
           <p className="page__sub">
             {currentUser?.role === "merchant"
-              ? "Manage admins across all stores."
-              : "Manage clerks in your store."}
+              ? "Create and manage admins and clerks."
+              : "Create and manage clerks in your store."}
           </p>
         </div>
-        <button
-          className="btn btn--primary"
-          onClick={() => setShowInvite((v) => !v)}
-        >
-          <UserPlus size={15} /> Invite User
+        <button className="btn btn--primary" onClick={() => setShowForm((v) => !v)}>
+          <UserPlus size={15} /> Create User
         </button>
       </div>
 
-      {/* ── Invite form ───────────────────────────────────────────────── */}
-      {showInvite && (
+      {/* ── Create user form ──────────────────────────────────────────── */}
+      {showForm && (
         <div className="card card--highlighted">
           <div className="card__header">
-            <Mail size={17} />
-            <h3 className="card__title">Send Invitation</h3>
+            <UserPlus size={17} />
+            <h3 className="card__title">Create New User</h3>
           </div>
 
           <form
-            onSubmit={handleInvite}
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: 16,
-              padding: 20,
-            }}
+            onSubmit={handleCreate}
+            style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, padding: 20 }}
           >
+            {/* First name */}
+            <div className="form-group">
+              <label className="form-label">First name *</label>
+              <input
+                type="text" name="first_name" value={form.first_name}
+                onChange={handleChange} className="form-input"
+                placeholder="Jane" autoFocus required
+              />
+            </div>
+
+            {/* Last name */}
+            <div className="form-group">
+              <label className="form-label">Last name *</label>
+              <input
+                type="text" name="last_name" value={form.last_name}
+                onChange={handleChange} className="form-input"
+                placeholder="Smith" required
+              />
+            </div>
+
             {/* Email */}
             <div className="form-group">
               <label className="form-label">Email address *</label>
               <input
-                type="email"
-                value={inviteForm.email}
-                onChange={(e) =>
-                  setInviteForm((prev) => ({ ...prev, email: e.target.value }))
-                }
-                className="form-input"
-                placeholder="colleague@example.com"
-                autoFocus
-                required
+                type="email" name="email" value={form.email}
+                onChange={handleChange} className="form-input"
+                placeholder="jane@example.com" required
               />
             </div>
 
-            {/* Role — merchant can invite admins; admin can only invite clerks */}
+            {/* Role */}
             <div className="form-group">
-              <label className="form-label">Role</label>
+              <label className="form-label">Role *</label>
               <select
-                value={inviteForm.role}
-                onChange={(e) =>
-                  setInviteForm((prev) => ({ ...prev, role: e.target.value }))
-                }
-                className="form-input"
+                name="role" value={form.role}
+                onChange={handleChange} className="form-input"
                 disabled={currentUser?.role === "admin"}
               >
                 {currentUser?.role === "merchant" && (
@@ -177,23 +183,46 @@ export default function UsersPage() {
               </select>
             </div>
 
+            {/* Password */}
+            <div className="form-group" style={{ gridColumn: "1 / -1" }}>
+              <label className="form-label">
+                Password *
+                <span style={{ color: "var(--text-dim)", fontWeight: 400, marginLeft: 6 }}>
+                  (min. 8 characters)
+                </span>
+              </label>
+              <div className="form-input-wrapper">
+                <input
+                  type={showPass ? "text" : "password"}
+                  name="password" value={form.password}
+                  onChange={handleChange}
+                  className="form-input form-input--padded-r"
+                  placeholder="Choose a strong password"
+                  required minLength={8}
+                />
+                <button
+                  type="button" className="form-input-eye"
+                  onClick={() => setShowPass((v) => !v)}
+                  aria-label={showPass ? "Hide" : "Show"}
+                >
+                  {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </div>
+
             {/* Actions */}
             <div style={{ gridColumn: "1 / -1", display: "flex", gap: 10 }}>
-              <button
-                type="submit"
-                className="btn btn--primary"
-                disabled={inviting}
-              >
-                {inviting ? <span className="btn__spinner" /> : <><Mail size={14} /> Send Invite</>}
+              <button type="submit" className="btn btn--primary" disabled={saving}>
+                {saving ? <span className="btn__spinner" /> : <><UserPlus size={14} /> Create User</>}
               </button>
               <button
-                type="button"
-                className="btn btn--ghost"
-                onClick={() => setShowInvite(false)}
+                type="button" className="btn btn--ghost"
+                onClick={() => { setShowForm(false); setForm(EMPTY_FORM); }}
               >
                 Cancel
               </button>
             </div>
+
           </form>
         </div>
       )}
@@ -211,7 +240,7 @@ export default function UsersPage() {
             <div className="table-loading"><div className="spinner" /></div>
           ) : users.length === 0 ? (
             <div className="table-empty">
-              No users found. Click "Invite User" to add someone.
+              No users yet. Click "Create User" to add someone.
             </div>
           ) : (
             <table className="data-table">
@@ -222,7 +251,6 @@ export default function UsersPage() {
                   <th>Role</th>
                   <th>Store</th>
                   <th>Status</th>
-                  <th>Joined</th>
                   <th>Actions</th>
                 </tr>
               </thead>
@@ -230,7 +258,6 @@ export default function UsersPage() {
                 {users.map((u) => (
                   <tr key={u.id} className={!u.is_active ? "tr--inactive" : ""}>
 
-                    {/* Avatar + name */}
                     <td className="td__user">
                       <div className="td__avatar">
                         {u.first_name?.[0]}{u.last_name?.[0]}
@@ -253,13 +280,6 @@ export default function UsersPage() {
                       }
                     </td>
 
-                    <td className="td--mono" style={{ fontSize: "0.8rem" }}>
-                      {u.created_at
-                        ? new Date(u.created_at).toLocaleDateString()
-                        : "—"}
-                    </td>
-
-                    {/* Actions — disabled for the current user's own account */}
                     <td className="td--actions">
                       {u.id !== currentUser?.id ? (
                         <>
@@ -267,7 +287,6 @@ export default function UsersPage() {
                             <button
                               className="btn btn--xs btn--amber"
                               onClick={() => handleDeactivate(u.id, u.email)}
-                              title="Deactivate (probation)"
                             >
                               <UserX size={12} /> Deactivate
                             </button>
@@ -275,7 +294,6 @@ export default function UsersPage() {
                             <button
                               className="btn btn--xs btn--green"
                               onClick={() => handleActivate(u.id, u.email)}
-                              title="Reactivate account"
                             >
                               <UserCheck size={12} /> Activate
                             </button>
@@ -283,15 +301,12 @@ export default function UsersPage() {
                           <button
                             className="btn btn--xs btn--ghost-red"
                             onClick={() => handleDelete(u.id, u.email)}
-                            title="Permanently delete"
                           >
                             <Trash2 size={12} />
                           </button>
                         </>
                       ) : (
-                        <span style={{ color: "var(--text-dim)", fontSize: "0.78rem" }}>
-                          (you)
-                        </span>
+                        <span style={{ color: "var(--text-dim)", fontSize: "0.78rem" }}>(you)</span>
                       )}
                     </td>
 

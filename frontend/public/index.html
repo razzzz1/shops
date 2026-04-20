@@ -4,13 +4,37 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#0f1117" />
+    <meta
+      name="description"
+      content="StockFlow — Smart inventory management for growing businesses."
+    />
+
+    <!--
+      Google Fonts are loaded here (in the HTML head) rather than in CSS
+      so they start downloading as early as possible, before any JS executes.
+      Using display=swap means text stays visible while fonts load.
+    -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+
     <title>StockFlow</title>
   </head>
+
   <body>
+    <!--
+      noscript is shown to users with JavaScript disabled.
+      StockFlow requires JS to function (React renders everything client-side).
+    -->
     <noscript>You need to enable JavaScript to run StockFlow.</noscript>
+
+    <!--
+      React mounts the entire application here.
+      Nothing visible renders in this div until React boots in index.js.
+    -->
     <div id="root"></div>
   </body>
 </html>

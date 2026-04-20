@@ -1,3 +1,4 @@
+
 # app/routes/auth_routes.py
 # ──────────────────────────
 # Authentication blueprint — every endpoint related to identity:
@@ -222,11 +223,26 @@ def send_invitation(current_user: User):
     db.session.add(token_record)
     db.session.commit()
 
-    # ── Send the invitation email ─────────────────────────────────────────────
+    # ── Build the invitation URL ──────────────────────────────────────────────
     frontend_url = current_app.config.get("FRONTEND_URL", "http://localhost:3000")
     invite_url   = f"{frontend_url}/register?token={raw_token}"
     expiry_hours = expires_seconds // 3600
 
+    # ── Always print the link to the terminal ────────────────────────────────
+    # This means you can ALWAYS copy the link from the Flask terminal,
+    # regardless of whether the email actually sends.
+    print("\n" + "="*60)
+    print("  INVITATION LINK (copy and open in browser)")
+    print("="*60)
+    print(f"  To:      {recipient_email}")
+    print(f"  Role:    {intended_role}")
+    print(f"  Store:   {store.name}")
+    print(f"  Expires: {expiry_hours} hours")
+    print(f"\n  {invite_url}\n")
+    print("="*60 + "\n")
+
+    # ── Also try to send via email (optional) ────────────────────────────────
+    email_sent = False
     try:
         msg = Message(
             subject    = "You're invited to join StockFlow",
@@ -255,16 +271,17 @@ def send_invitation(current_user: User):
             """,
         )
         mail.send(msg)
+        email_sent = True
     except Exception as exc:
-        # Log but don't expose the internal error to the client
-        current_app.logger.error(f"Invitation email failed for {recipient_email}: {exc}")
-        return jsonify({
-            "message": "Invitation saved but email delivery failed. Check server logs."
-        }), 500
+        # Email failed — that's OK, the link is printed in the terminal above
+        current_app.logger.warning(f"Email not sent for {recipient_email}: {exc}")
 
+    # ── Always return success — the link is always in the terminal ────────────
     return jsonify({
-        "message": f"Invitation sent to {recipient_email}.",
-        "token_id": token_record.id,
+        "message": f"Invitation created for {recipient_email}. Check the Flask terminal for the registration link.",
+        "token_id":   token_record.id,
+        "invite_url": invite_url,      # also returned in the API response
+        "email_sent": email_sent,
     }), 201
 
 
@@ -406,4 +423,81 @@ def register():
         "access_token":  access_token,
         "refresh_token": refresh_token,
         "user":          new_user.to_dict(include_store=True),
+    }), 201
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# POST /api/auth/create-user
+# ─────────────────────────────────────────────────────────────────────────────
+
+@auth_bp.route("/create-user", methods=["POST"])
+@jwt_required()
+@role_required("merchant", "admin")
+def create_user_directly(current_user: User):
+    """
+    Create a user account directly — no email/invitation needed.
+
+    This is a simplified alternative to the invitation flow.
+    Merchant can create admins and clerks.
+    Admin can only create clerks in their own store.
+
+    Request body (JSON)
+    -------------------
+    {
+        "email":      "newclerk@example.com",
+        "first_name": "Jane",
+        "last_name":  "Smith",
+        "password":   "SecurePass1!",
+        "role":       "clerk",
+        "store_id":   1          (optional — admin uses their own store)
+    }
+    """
+    data = request.get_json(silent=True) or {}
+
+    email      = data.get("email",      "").strip().lower()
+    first_name = data.get("first_name", "").strip()
+    last_name  = data.get("last_name",  "").strip()
+    password   = data.get("password",   "")
+    role       = data.get("role",       "clerk").strip()
+
+    # ── Validate required fields ──────────────────────────────────────────────
+    if not all([email, first_name, last_name, password]):
+        return jsonify({
+            "message": "email, first_name, last_name and password are all required."
+        }), 400
+
+    if len(password) < 8:
+        return jsonify({"message": "Password must be at least 8 characters."}), 400
+
+    # ── Role permission check ─────────────────────────────────────────────────
+    if current_user.role == "admin":
+        if role != "clerk":
+            return jsonify({"message": "Admins can only create clerk accounts."}), 403
+        store_id = current_user.store_id
+    else:
+        # Merchant
+        if role not in ("admin", "clerk"):
+            return jsonify({"message": "Role must be 'admin' or 'clerk'."}), 400
+        store_id = int(data.get("store_id") or current_user.store_id)
+
+    # ── Check email not already taken ─────────────────────────────────────────
+    if User.query.filter_by(email=email).first():
+        return jsonify({"message": f"A user with email '{email}' already exists."}), 409
+
+    # ── Create the user ───────────────────────────────────────────────────────
+    new_user = User(
+        email         = email,
+        password_hash = hash_password(password),
+        first_name    = first_name,
+        last_name     = last_name,
+        role          = role,
+        store_id      = store_id,
+        is_active     = True,
+    )
+    db.session.add(new_user)
+    db.session.commit()
+
+    return jsonify({
+        "message": f"User {email} created successfully.",
+        "user":    new_user.to_dict(include_store=True),
     }), 201

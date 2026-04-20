@@ -1,4 +1,7 @@
-
+# app/models/product.py
+# ──────────────────────
+# Product model — master catalogue of stockable items for a store.
+#
 # Each product belongs to exactly one store.
 # buying_price and selling_price here are the store's CURRENT / DEFAULT prices.
 # Individual InventoryEntry rows record the actual prices for each delivery

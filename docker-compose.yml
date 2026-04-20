@@ -1,0 +1,134 @@
+# docker-compose.yml
+# ────────────────────
+# One-command local development stack for StockFlow.
+#
+# Services
+# ────────
+#   db        — PostgreSQL 15 database
+#   backend   — Flask REST API  (port 5000)
+#   frontend  — React dev server (port 3000)
+#   mailhog   — Catches all outgoing emails (port 8025 for web UI)
+#
+# Usage
+# ─────
+#   docker compose up              # start everything
+#   docker compose up -d           # start in background
+#   docker compose logs -f backend # tail backend logs
+#   docker compose down            # stop and remove containers
+#   docker compose down -v         # also remove the postgres volume
+#
+# First run
+# ─────────
+# After `docker compose up` completes, the backend container
+# automatically runs migrations and seeds the superuser.
+# Default credentials:
+#   Email:    merchant@stockflow.app
+#   Password: ChangeMe123!
+#
+# View emails sent by the app (invitation links) at:
+#   http://localhost:8025
+
+version: "3.9"
+
+services:
+
+  # ── PostgreSQL 15 ───────────────────────────────────────────────────────────
+  db:
+    image: postgres:15-alpine
+    container_name: stockflow_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     stockflow
+      POSTGRES_PASSWORD: stockflow_pass
+      POSTGRES_DB:       stockflow_db
+    volumes:
+      # Named volume — data persists across container restarts
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      # Wait until PostgreSQL is ready to accept connections before
+      # starting the backend (prevents "connection refused" on startup)
+      test: ["CMD-SHELL", "pg_isready -U stockflow -d stockflow_db"]
+      interval: 5s
+      timeout:  5s
+      retries:  10
+
+  # ── Flask API ───────────────────────────────────────────────────────────────
+  backend:
+    build:
+      context:    ./backend
+      dockerfile: Dockerfile
+    container_name: stockflow_backend
+    restart: unless-stopped
+    environment:
+      FLASK_APP:   run.py
+      FLASK_ENV:   development
+      # Database — points to the `db` service above
+      DATABASE_URL: postgresql://stockflow:stockflow_pass@db:5432/stockflow_db
+      # Security — change these before going to production
+      SECRET_KEY:     dev-secret-key-change-in-production
+      JWT_SECRET_KEY: dev-jwt-secret-change-in-production
+      # JWT token lifetimes in seconds
+      JWT_ACCESS_TOKEN_EXPIRES:  3600
+      JWT_REFRESH_TOKEN_EXPIRES: 604800
+      # Email — points to MailHog (catches all emails in dev)
+      MAIL_SERVER:  mailhog
+      MAIL_PORT:    1025
+      MAIL_USE_TLS: "False"
+      MAIL_DEFAULT_SENDER: noreply@stockflow.app
+      # Invitation link settings
+      INVITATION_TOKEN_EXPIRES: 86400
+      FRONTEND_URL: http://localhost:3000
+    ports:
+      - "5000:5000"
+    depends_on:
+      db:
+        condition: service_healthy   # wait for postgres healthcheck
+    volumes:
+      # Mount source code so code changes reflect without rebuilding
+      - ./backend:/app
+    command: >
+      sh -c "
+        flask db upgrade &&
+        flask seed-superuser &&
+        python run.py
+      "
+
+  # ── React Dev Server ─────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context:    ./frontend
+      dockerfile: Dockerfile
+    container_name: stockflow_frontend
+    restart: unless-stopped
+    environment:
+      # Tells React where the Flask API is
+      REACT_APP_API_URL: http://localhost:5000/api
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    volumes:
+      # Mount source for hot-reload — only src/ and public/ need syncing
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+    stdin_open: true   # required for create-react-app hot reload in Docker
+
+  # ── MailHog ──────────────────────────────────────────────────────────────────
+  # Catches all outgoing SMTP mail during development.
+  # Open http://localhost:8025 to view invitation emails, password resets, etc.
+  # No emails ever reach real inboxes — safe for testing.
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: stockflow_mailhog
+    restart: unless-stopped
+    ports:
+      - "1025:1025"   # SMTP — backend sends to this port
+      - "8025:8025"   # Web UI — view captured emails here
+
+# ── Named volumes ─────────────────────────────────────────────────────────────
+volumes:
+  # PostgreSQL data persists between `docker compose down` / `up` cycles.
+  # Use `docker compose down -v` to wipe it completely (fresh start).
+  postgres_data:

@@ -1,3 +1,4 @@
+
 // src/components/shared/Layout.js
 // ──────────────────────────────────
 // Persistent app shell rendered for every protected route.
@@ -16,6 +17,7 @@ import { useDispatch, useSelector } from "react-redux";
 import {
   LayoutDashboard,
   Package,
+  Package2,
   ShoppingCart,
   BarChart2,
   CreditCard,

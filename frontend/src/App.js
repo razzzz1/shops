@@ -1,3 +1,4 @@
+
 // src/App.js
 // ───────────
 // Root component — sets up:
@@ -37,6 +38,7 @@ import AdminDashboard    from "./pages/admin/AdminDashboard";
 import AdminReportsPage  from "./pages/admin/AdminReportsPage";
 import PaymentPage       from "./pages/admin/PaymentPage";
 import UsersPage         from "./pages/admin/UsersPage";
+import ProductsPage      from "./pages/admin/ProductsPage";
 
 // ── Merchant pages ────────────────────────────────────────────────────────
 import MerchantDashboard from "./pages/merchant/MerchantDashboard";
@@ -190,7 +192,8 @@ export default function App() {
                 <Route index          element={<AdminDashboard />} />
                 <Route path="reports" element={<AdminReportsPage />} />
                 <Route path="payment" element={<PaymentPage />} />
-                <Route path="users"   element={<UsersPage />} />
+                <Route path="users"    element={<UsersPage />} />
+                <Route path="products" element={<ProductsPage />} />
               </Route>
             </Route>
 
