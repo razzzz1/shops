@@ -1,105 +1,97 @@
-// src/pages/merchant/MerchantDashboard.js
-// ──────────────────────────────────────────
-// Merchant's top-level view — a grid of store cards, each showing
-// key metrics for that store. Clicking a card drills into the full
-// StoreReportPage for that store.
-//
-// Because the API doesn't have a dedicated /stores/ endpoint yet,
-// we derive the store list from the admin users endpoint (each admin
-// belongs to one store). The merchant then fetches a summary for each
-// store in parallel.
 
+// src/pages/merchant/MerchantDashboard.js
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  Store, TrendingUp, Package, AlertCircle, ChevronRight,
-} from "lucide-react";
+import { Store, TrendingUp, Package, AlertCircle, ChevronRight, RefreshCw } from "lucide-react";
 import toast from "react-hot-toast";
-
 import api from "../../utils/api";
 
 export default function MerchantDashboard() {
   const navigate = useNavigate();
-
   const [stores,    setStores]    = useState([]);
-  const [summaries, setSummaries] = useState({}); // { [store_id]: summaryObj }
+  const [summaries, setSummaries] = useState({});
   const [loading,   setLoading]   = useState(true);
 
-  // ── Load stores and their summaries on mount ──────────────────────────────
-  useEffect(() => {
-    loadStores();
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
-  async function loadStores() {
+  async function loadData() {
     setLoading(true);
     try {
-      // Fetch all admin users — each admin belongs to a store
-      const { data: adminUsers } = await api.get("/users/", {
-        params: { role: "admin", include_inactive: 1 },
+      // Step 1 — get all users to find stores
+      const { data: allUsers } = await api.get("/users/", {
+        params: { include_inactive: 1 },
       });
 
-      // Deduplicate stores (multiple admins can share a store)
+      // Collect unique stores from all users
       const storeMap = {};
-      adminUsers.forEach((u) => {
-        if (u.store && !storeMap[u.store.id]) {
+      allUsers.forEach((u) => {
+        if (u.store && u.store.id && !storeMap[u.store.id]) {
           storeMap[u.store.id] = u.store;
         }
       });
+
       const uniqueStores = Object.values(storeMap);
+
+      // If still no stores, try to get the merchant's own store
+      if (uniqueStores.length === 0) {
+        const { data: me } = await api.get("/users/me");
+        if (me.store) uniqueStores.push(me.store);
+      }
+
       setStores(uniqueStores);
 
-      // Fetch a KPI summary for each store in parallel
-      const summaryResults = await Promise.allSettled(
-        uniqueStores.map((store) =>
-          api.get("/reports/summary", { params: { store_id: store.id } })
-        )
-      );
-
-      const summaryMap = {};
-      summaryResults.forEach((result, i) => {
-        if (result.status === "fulfilled") {
-          summaryMap[uniqueStores[i].id] = result.value.data;
-        }
-      });
-      setSummaries(summaryMap);
+      // Step 2 — fetch summary for each store in parallel
+      if (uniqueStores.length > 0) {
+        const results = await Promise.allSettled(
+          uniqueStores.map((s) =>
+            api.get("/reports/summary", { params: { store_id: s.id } })
+          )
+        );
+        const map = {};
+        results.forEach((res, i) => {
+          if (res.status === "fulfilled") {
+            map[uniqueStores[i].id] = res.value.data;
+          }
+        });
+        setSummaries(map);
+      }
 
     } catch (err) {
-      toast.error(err.response?.data?.message || "Failed to load stores.");
+      toast.error("Failed to load stores.");
     } finally {
       setLoading(false);
     }
   }
 
-  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="page">
-
       <div className="page__header">
         <div>
           <h2 className="page__title">All Stores</h2>
-          <p className="page__sub">
-            Click a store to view its detailed performance report.
-          </p>
+          <p className="page__sub">Overview of all store locations. Click a store to view its full report.</p>
         </div>
+        <button className="btn btn--outline" onClick={loadData}>
+          <RefreshCw size={14} /> Refresh
+        </button>
       </div>
 
-      {/* ── Loading ───────────────────────────────────────────────────── */}
       {loading && (
-        <div className="page-loading">
-          <div className="spinner spinner--lg" />
-        </div>
+        <div className="page-loading"><div className="spinner spinner--lg" /></div>
       )}
 
-      {/* ── Empty state ───────────────────────────────────────────────── */}
       {!loading && stores.length === 0 && (
         <div className="card">
           <div className="table-empty">
-            No stores found. Invite admins to set up store locations.
+            <p>No stores found.</p>
+            <p style={{ marginTop: 8, fontSize: "0.85rem" }}>
+              Run <code style={{ background: "var(--surface-2)", padding: "2px 6px", borderRadius: 4 }}>
+                flask seed-demo
+              </code> in the backend terminal to populate demo data.
+            </p>
           </div>
         </div>
       )}
 
-      {/* ── Store grid ────────────────────────────────────────────────── */}
       {!loading && stores.length > 0 && (
         <div className="store-grid">
           {stores.map((store) => {
@@ -111,47 +103,38 @@ export default function MerchantDashboard() {
                 onClick={() => navigate(`/merchant/stores/${store.id}`)}
                 role="button"
                 tabIndex={0}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") navigate(`/merchant/stores/${store.id}`);
-                }}
+                onKeyDown={(e) => e.key === "Enter" && navigate(`/merchant/stores/${store.id}`)}
               >
-                {/* Store header */}
                 <div className="store-card__header">
                   <Store size={26} className="store-card__icon" />
                   <div>
                     <h3 className="store-card__name">{store.name}</h3>
-                    <p className="store-card__location">
-                      {store.location || "No location set"}
-                    </p>
+                    <p className="store-card__location">{store.location || "No location set"}</p>
                   </div>
                 </div>
 
-                {/* KPI mini-stats */}
                 {s ? (
                   <div className="store-card__stats">
                     <div className="store-card__stat">
                       <Package size={13} />
-                      <span>
-                        In Stock: <strong>{s.total_in_stock?.toLocaleString()}</strong>
-                      </span>
+                      <span>In Stock: <strong>{Number(s.total_in_stock).toLocaleString()}</strong></span>
                     </div>
                     <div className="store-card__stat">
                       <TrendingUp size={13} />
-                      <span>
-                        Revenue Potential:{" "}
-                        <strong>KES {Number(s.revenue_potential).toLocaleString()}</strong>
-                      </span>
+                      <span>Revenue Potential: <strong>KES {Number(s.revenue_potential).toLocaleString()}</strong></span>
                     </div>
                     <div className="store-card__stat store-card__stat--unpaid">
                       <AlertCircle size={13} />
-                      <span>
-                        Unpaid:{" "}
-                        <strong>KES {Number(s.unpaid_cost).toLocaleString()}</strong>
+                      <span>Unpaid: <strong>KES {Number(s.unpaid_cost).toLocaleString()}</strong></span>
+                    </div>
+                    <div className="store-card__stat">
+                      <span style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>
+                        {s.entry_count} entries recorded
                       </span>
                     </div>
                   </div>
                 ) : (
-                  <div className="store-card__no-data">No data yet</div>
+                  <div className="store-card__no-data">No data yet for this store</div>
                 )}
 
                 <div className="store-card__footer">
