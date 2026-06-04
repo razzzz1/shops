@@ -149,7 +149,7 @@ def create_entry(current_user):
             "message": "You can only record entries for products in your own store."
         }), 403
 
-    # ── Parse entry_date (defaults to today) ──────────────────────────────────
+    # enter entry_date 
     entry_date = date.today()
     if data.get("entry_date"):
         try:
@@ -159,7 +159,7 @@ def create_entry(current_user):
                 "message": "Invalid entry_date format. Use YYYY-MM-DD."
             }), 400
 
-    # ── Validate quantities are non-negative integers ─────────────────────────
+    #  Validate quantities are nonnegative integers 
     try:
         qty_received = int(data["quantity_received"])
         qty_in_stock = int(data["quantity_in_stock"])
@@ -170,7 +170,7 @@ def create_entry(current_user):
     if any(q < 0 for q in [qty_received, qty_in_stock, qty_spoilt]):
         return jsonify({"message": "Quantities cannot be negative."}), 400
 
-    # ── Validate payment status ────────────────────────────────────────────────
+    #  Validate payment status 
     payment_status = data.get("payment_status", "unpaid")
     if payment_status not in ("paid", "unpaid"):
         return jsonify({"message": "payment_status must be 'paid' or 'unpaid'."}), 400
