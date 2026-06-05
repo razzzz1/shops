@@ -7,14 +7,14 @@
         "config": { "distDir": "build" }
       },
       {
-        "src": "backend/index.py",
+        "src": "backend/run.py",
         "use": "@vercel/python"
       }
     ],
     "rewrites": [
       {
         "source": "/api/:path*",
-        "destination": "backend/index.py"
+        "destination": "backend/run.py"
       },
       {
         "source": "/(.*)",
