@@ -1,11 +1,4 @@
-// src/pages/admin/PaymentPage.js
-// ────────────────────────────────
-// Payment tracker — shows all supplier invoices separated into two clearly
-// distinct sections: UNPAID (needs attention) and PAID (settled).
-//
-// Admin can mark individual unpaid entries as paid from this page.
-// The spec requires these to be "well separated" — unpaid is shown first
-// with an attention border, paid is shown below.
+
 
 import React, { useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";

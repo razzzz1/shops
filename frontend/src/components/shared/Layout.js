@@ -17,7 +17,6 @@ import { useDispatch, useSelector } from "react-redux";
 import {
   LayoutDashboard,
   Package,
-  Package2,
   ShoppingCart,
   BarChart2,
   CreditCard,
